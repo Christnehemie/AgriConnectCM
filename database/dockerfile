@@ -1,0 +1,5 @@
+FROM postgres:17-alpine
+ENV POSTGRES_DB=agriconnectdb
+ENV POSTGRES_USER=agriconnect
+ENV POSTGRES_PASSWORD=agriconnect237
+EXPOSE 5432
