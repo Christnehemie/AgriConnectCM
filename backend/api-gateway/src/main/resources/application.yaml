@@ -6,11 +6,32 @@ spring:
     name: api-gateway
   cloud:
     gateway:
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOriginPatterns:
+              - "http://localhost:8100"
+              - "http://localhost:8101"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
       routes:
         - id: service-utilisateurs
           uri: lb://service-utilisateurs
           predicates:
             - Path=/api/auth/**, /api/users/**
+
+        # ── NOUVEAU ──────────────────────────────────────
+        - id: service-abonnements
+          uri: lb://service-abonnements
+          predicates:
+            - Path=/api/abonnements/**
 
         - id: service-offres
           uri: lb://service-offres
@@ -40,7 +61,7 @@ spring:
 eureka:
   client:
     serviceUrl:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: http://service-registry:8761/eureka/
 
 jwt:
-  secret: "agriconnect@2026#camer123456789"
+  secret: "agriconnect@2026#cameroun!XyZ789"

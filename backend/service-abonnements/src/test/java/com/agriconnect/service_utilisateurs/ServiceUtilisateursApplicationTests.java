@@ -1,10 +1,10 @@
-package com.agriconnect.service_registry;
+package com.agriconnect.service_utilisateurs;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class ServiceRegistryApplicationTests {
+class ServiceUtilisateursApplicationTests {
 
 	@Test
 	void contextLoads() {

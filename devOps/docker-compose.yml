@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+
+  database:
+    build: ../database
+    container_name: agriconnect-db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - agriconnect-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agriconnect -d agriconnectdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  service-registry:
+    build: ../backend/service-registry
+    container_name: service-registry
+    ports:
+      - "8761:8761"
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - agriconnect-net
+
+  api-gateway:
+    build: ../backend/api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - service-registry
+    networks:
+      - agriconnect-net
+
+  service-utilisateurs:
+    build: ../backend/service-utilisateurs
+    container_name: service-utilisateurs
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://database:5432/agriconnectdb
+      SPRING_DATASOURCE_USERNAME: agriconnect
+      SPRING_DATASOURCE_PASSWORD: agriconnect237
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka/
+    depends_on:
+      - service-registry
+      - database
+    networks:
+      - agriconnect-net
+
+  # ── NOUVEAU — Service Abonnements ─────────────────────
+  service-abonnements:
+    build: ../backend/service-abonnements
+    container_name: service-abonnements
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://database:5432/agriconnectdb
+      SPRING_DATASOURCE_USERNAME: agriconnect
+      SPRING_DATASOURCE_PASSWORD: agriconnect237
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka/
+    depends_on:
+      - service-registry
+      - database
+    networks:
+      - agriconnect-net
+
+  frontend:
+    build: ../frontend
+    container_name: agriconnect-frontend
+    ports:
+      - "8100:8100"
+    volumes:
+      - ../frontend/src:/app/src
+    depends_on:
+      - api-gateway
+    networks:
+      - agriconnect-net
+
+networks:
+  agriconnect-net:
+    driver: bridge
+
+volumes:
+  postgres-data:

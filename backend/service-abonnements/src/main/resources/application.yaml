@@ -1,0 +1,34 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: service-abonnements
+  datasource:
+    # Même BD que service-utilisateurs — tables partagées
+    url: jdbc:postgresql://database:5432/agriconnectdb
+    username: agriconnect
+    password: agriconnect237
+  jpa:
+    hibernate:
+      # update — ne recrée pas les tables existantes
+      ddl-auto: update
+    show-sql: false
+
+# Eureka — enregistrement auprès du service-registry
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://service-registry:8761/eureka/
+
+# JWT — même secret que service-utilisateurs
+jwt:
+  secret: "agriconnect@2026#cameroun!XyZ789"
+  expiration: 86400000
+
+# NotchPay — paiement mobile Cameroun
+notchpay:
+  public-key: "pk_test.kXjJcvxNQOCimogZuojKjLyw4XLF8BBGwchuLBt0LHetSQDBeyHgu7VZfdR1o7o0bGpgMPMou2mw3FPESHmmbvjEN0xpYNowqzURPGHUZM0Rda5tinZOvqh0S7Vs5"       # ← ta clé publique pk_test_...
+  secret-key: "sk_test.tToQMdoRUYwKM5Ff61vmibCzIuklQPolNQZlBMx0fAdDVt7puJiVtE6wvPOhIGtklPOE1rhCcj3ZvvjRz9cbEsL9Bkoduf9QlYXEQOdamU2MoDTD9VcLIQn03NKyM"       # ← ta clé secrète sk_test_...
+  api-url: "https://api.notchpay.co"
+  callback-url: "http://localhost:8082/api/abonnements/webhook-notchpay"
