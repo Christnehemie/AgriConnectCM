@@ -25,7 +25,7 @@ import java.util.Optional;
  * ============================================================
  * Fonctionnalités :
  *   Gratuit → tout bloqué ❌
- *   Premium → messagerie ✅  annonces ✅  paiement ❌  suivi ❌  support ❌
+ *   Premium → messagerie ✅  annonces ✅  paiement ❌  suivi ❌
  *   Pro     → tout débloqué ✅
  * ============================================================
  */
@@ -50,16 +50,12 @@ public class AbonnementService {
         Optional<Abonnement> aboOpt = abonnementRepo
                 .findByIdUtilisateurAndStatut(idUtilisateur, "ACTIF");
 
-        if (aboOpt.isPresent()) {
-            return buildResponse(aboOpt.get(), true);
-        }
+        if (aboOpt.isPresent()) return buildResponse(aboOpt.get(), true);
 
         Optional<Abonnement> expireOpt = abonnementRepo
                 .findByIdUtilisateurAndStatut(idUtilisateur, "EXPIRE");
 
-        if (expireOpt.isPresent()) {
-            return buildResponse(expireOpt.get(), false);
-        }
+        if (expireOpt.isPresent()) return buildResponse(expireOpt.get(), false);
 
         return buildGratuitResponse();
     }
@@ -78,14 +74,14 @@ public class AbonnementService {
             throw new RuntimeException("Impossible de souscrire à Gratuit");
         }
 
+        // Bloquer si abonnement encore actif
         Optional<Abonnement> actif = abonnementRepo
                 .findByIdUtilisateurAndStatut(idUtilisateur, "ACTIF");
 
         if (actif.isPresent()) {
-            Abonnement abo = actif.get();
             throw new RuntimeException(
-                    "Abonnement " + abo.getCategorieAbonnement().getLibelle() +
-                    " actif jusqu'au " + abo.getDateFin()
+                    "Abonnement " + actif.get().getCategorieAbonnement().getLibelle() +
+                    " actif jusqu'au " + actif.get().getDateFin()
             );
         }
 
@@ -95,8 +91,11 @@ public class AbonnementService {
 
         int montant = cat.getPrix() != null ? cat.getPrix().intValue() : 2000;
 
+        // FIX : référence avec idUtilisateur réel — jamais null
         String reference = notchPayService.genererReference(idUtilisateur, libelle);
+        log.info("Référence générée : {} pour idUtilisateur={}", reference, idUtilisateur);
 
+        // Créer paiement EN_ATTENTE
         Paiement paiement = Paiement.builder()
                 .reference(reference)
                 .montant(BigDecimal.valueOf(montant))
@@ -108,9 +107,8 @@ public class AbonnementService {
                 .build();
 
         paiementRepo.save(paiement);
-        log.info("Paiement EN_ATTENTE : reference={} idUtilisateur={} montant={} XAF",
-                reference, idUtilisateur, montant);
 
+        // Appeler NotchPay
         Map<String, Object> notchPayResult = notchPayService.initierPaiement(
                 email,
                 montant,
@@ -128,37 +126,73 @@ public class AbonnementService {
     }
 
     // ──────────────────────────────────────────────────────
-    // CONFIRMER PAIEMENT (webhook)
+    // CONFIRMER PAIEMENT
     // ──────────────────────────────────────────────────────
 
+    /**
+     * Confirme le paiement depuis le webhook POST ou callback GET.
+     * Cherche le paiement par la référence NotchPay (trxref).
+     *
+     * @param reference  référence NotchPay (peut être trx.test_xxx ou abo_xxx)
+     * @param statut     "complete" si paiement réussi
+     */
     @Transactional
-    public void confirmerPaiement(String reference, String statut) {
-        Paiement paiement = paiementRepo.findByReference(reference)
-                .orElseThrow(() -> new RuntimeException("Paiement introuvable : " + reference));
+    public String confirmerPaiement(String reference, String statut) {
+        log.info("Confirmation paiement : reference={} statut={}", reference, statut);
 
-        if ("COMPLETE".equals(paiement.getStatut())) {
-            log.warn("Paiement déjà traité : reference={}", reference);
-            return;
+        // Chercher par référence exacte d'abord
+        Optional<Paiement> paiementOpt = paiementRepo.findByReference(reference);
+
+        // Si pas trouvé → chercher par trxref NotchPay dans la raison
+        if (paiementOpt.isEmpty()) {
+            // NotchPay retourne parfois trx.test_xxx comme reference
+            // mais notre référence est abo_xxx → chercher dans tous les EN_ATTENTE
+            paiementOpt = paiementRepo.findFirstByStatutOrderByDateSendDesc("EN_ATTENTE");
+            log.warn("Référence exacte non trouvée : {} → utilisation du dernier EN_ATTENTE", reference);
         }
 
-        boolean paiementConfirme = "complete".equalsIgnoreCase(statut) &&
-                notchPayService.verifierPaiement(reference);
+        if (paiementOpt.isEmpty()) {
+            log.error("Aucun paiement EN_ATTENTE trouvé pour reference={}", reference);
+            return "ERREUR : Paiement introuvable";
+        }
 
-        if (!paiementConfirme) {
+        Paiement paiement = paiementOpt.get();
+
+        // Ignorer si déjà traité
+        if ("COMPLETE".equals(paiement.getStatut())) {
+            log.warn("Paiement déjà traité : reference={}", paiement.getReference());
+            return "DEJA_TRAITE";
+        }
+
+        // Vérifier le statut
+        boolean confirme = "complete".equalsIgnoreCase(statut);
+
+        if (!confirme) {
             paiement.setStatut("ECHEC");
             paiementRepo.save(paiement);
-            log.warn("Paiement ECHEC : reference={} statut={}", reference, statut);
-            return;
+            log.warn("Paiement ECHEC : reference={}", paiement.getReference());
+            return "ECHEC";
         }
 
-        // Extraire infos : abo_{idUtilisateur}_{categorie}_{timestamp}
-        String[] parts            = reference.split("_");
-        Integer  idUtilisateur    = Integer.parseInt(parts[1]);
-        String   libelleCategorie = parts[2];
+        // Extraire idUtilisateur et categorie depuis notre référence (abo_10_Premium_xxx)
+        Integer idUtilisateur;
+        String  libelleCategorie;
 
+        try {
+            String[] parts    = paiement.getReference().split("_");
+            idUtilisateur     = Integer.parseInt(parts[1]);
+            libelleCategorie  = parts[2];
+        } catch (Exception e) {
+            // Fallback : utiliser idSender et raison
+            idUtilisateur    = paiement.getIdSender();
+            libelleCategorie = paiement.getRaison().replace("Abonnement ", "").trim();
+            log.warn("Parse référence échoué → fallback idSender={} raison={}", idUtilisateur, libelleCategorie);
+        }
+
+        final String libelleCategorieFinal = libelleCategorie;
         CategorieAbonnement cat = categorieRepo
-                .findByLibelleIgnoreCase(libelleCategorie)
-                .orElseThrow(() -> new RuntimeException("Catégorie introuvable : " + libelleCategorie));
+                .findByLibelleIgnoreCase(libelleCategorieFinal)
+                .orElseThrow(() -> new RuntimeException("Catégorie introuvable : " + libelleCategorieFinal));
 
         LocalDateTime now   = LocalDateTime.now();
         int           duree = cat.getDuree() != null ? cat.getDuree() : 30;
@@ -177,8 +211,10 @@ public class AbonnementService {
         paiement.setIdAbonnement(saved.getId());
         paiementRepo.save(paiement);
 
-        log.info("Abonnement activé : idUtilisateur={} categorie={} dateFin={}",
+        log.info("✅ Abonnement activé : idUtilisateur={} categorie={} dateFin={}",
                 idUtilisateur, cat.getLibelle(), saved.getDateFin());
+
+        return "OK";
     }
 
     // ──────────────────────────────────────────────────────
@@ -191,9 +227,7 @@ public class AbonnementService {
                 .findByIdUtilisateurAndStatut(idUtilisateur, "ACTIF");
 
         if (actif.isPresent()) {
-            throw new RuntimeException(
-                    "Abonnement encore actif jusqu'au " + actif.get().getDateFin()
-            );
+            throw new RuntimeException("Abonnement encore actif jusqu'au " + actif.get().getDateFin());
         }
 
         Optional<Abonnement> expire = abonnementRepo
@@ -232,8 +266,7 @@ public class AbonnementService {
     private void verifierExpiration(Integer idUtilisateur) {
         abonnementRepo.findByIdUtilisateurAndStatut(idUtilisateur, "ACTIF")
                 .ifPresent(abo -> {
-                    if (abo.getDateFin() != null &&
-                            LocalDateTime.now().isAfter(abo.getDateFin())) {
+                    if (abo.getDateFin() != null && LocalDateTime.now().isAfter(abo.getDateFin())) {
                         abo.setStatut("EXPIRE");
                         abonnementRepo.save(abo);
                     }

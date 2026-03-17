@@ -51,13 +51,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             log.info("JWT → email={} | role={} | idUtilisateur={}", email, role, idUtilisateur);
 
-            if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            if (email != null) {
+                // FIX : toujours créer l'authentification avec l'id
+                // La condition == null empêchait le setDetails sur les requêtes suivantes
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
                                 email,
                                 null,
                                 List.of(new SimpleGrantedAuthority("ROLE_" + role))
                         );
+                // idUtilisateur stocké dans details → récupéré via auth.getDetails()
                 authentication.setDetails(idUtilisateur);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }

@@ -14,9 +14,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * SecurityConfig — Configuration Spring Security
  * ============================================================
  * Routes publiques  :
- *   - GET  /api/abonnements/categories         → liste des offres
- *   - POST /api/abonnements/webhook-notchpay   → callback NotchPay
- *     (NotchPay appelle ce endpoint sans JWT)
+ *   - GET  /api/abonnements/categories
+ *   - POST /api/abonnements/webhook-notchpay  → webhook POST
+ *   - GET  /api/abonnements/webhook-notchpay  → callback GET (redirect navigateur)
  *
  * Routes protégées  : tout le reste (JWT requis)
  * ============================================================
@@ -36,11 +36,10 @@ public class SecurityConfig {
                 .sessionManagement(s ->
                         s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Publique — pas de JWT requis
                         .requestMatchers("/api/abonnements/categories").permitAll()
-                        // Webhook NotchPay — appelé par NotchPay sans JWT
+                        // GET et POST tous les deux publics pour NotchPay
                         .requestMatchers("/api/abonnements/webhook-notchpay").permitAll()
-                        // Tout le reste — JWT obligatoire
+                        .requestMatchers("/api/abonnements/callback-notchpay").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

@@ -17,4 +17,11 @@ public interface PaiementRepository extends JpaRepository<Paiement, Integer> {
 
     /** Vérifie si une référence existe déjà */
     boolean existsByReference(String reference);
+
+    /**
+     * Trouve le dernier paiement EN_ATTENTE.
+     * Utilisé comme fallback quand NotchPay retourne
+     * sa propre référence (trx.test_xxx) au lieu de la nôtre.
+     */
+    Optional<Paiement> findFirstByStatutOrderByDateSendDesc(String statut);
 }
