@@ -27,16 +27,15 @@ spring:
           predicates:
             - Path=/api/auth/**, /api/users/**
 
-        # ── NOUVEAU ──────────────────────────────────────
         - id: service-abonnements
           uri: lb://service-abonnements
           predicates:
             - Path=/api/abonnements/**
 
-        - id: service-offres
-          uri: lb://service-offres
+        - id: service-offre
+          uri: lb://service-offre
           predicates:
-            - Path=/api/offres/**
+            - Path=/api/offre/**
 
         - id: service-suivi
           uri: lb://service-suivi
@@ -53,10 +52,13 @@ spring:
           predicates:
             - Path=/api/alertes/**
 
+        # ── Service Messagerie ────────────────────────────
+        # REST : /api/messagerie/**
+        # WebSocket : /ws/**
         - id: service-messagerie
           uri: lb://service-messagerie
           predicates:
-            - Path=/api/messages/**, /ws/**
+            - Path=/api/messagerie/**, /ws/**
 
 eureka:
   client:

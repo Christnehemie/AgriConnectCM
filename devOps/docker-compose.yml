@@ -54,12 +54,29 @@ services:
     networks:
       - agriconnect-net
 
-  # ── NOUVEAU — Service Abonnements ─────────────────────
   service-abonnements:
     build: ../backend/service-abonnements
     container_name: service-abonnements
     ports:
       - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://database:5432/agriconnectdb
+      SPRING_DATASOURCE_USERNAME: agriconnect
+      SPRING_DATASOURCE_PASSWORD: agriconnect237
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka/
+    depends_on:
+      - service-registry
+      - database
+    networks:
+      - agriconnect-net
+
+  # ── Service Messagerie ────────────────────────────────
+  service-messagerie:
+    build: ../backend/service-messagerie
+    container_name: service-messagerie
+    restart: always
+    ports:
+      - "8083:8083"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://database:5432/agriconnectdb
       SPRING_DATASOURCE_USERNAME: agriconnect

@@ -8,19 +8,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
-/**
- * ============================================================
- * UserService — Logique métier de gestion du profil
- * ============================================================
- * Gère :
- *   - Récupération du profil complet selon le rôle
- *   - Modification des informations personnelles
- *   - Mise à jour de la photo (URL Cloudinary)
- *   - Changement de mot de passe
- * ============================================================
- */
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -33,16 +24,9 @@ public class UserService {
 
     // ── GET PROFIL ────────────────────────────────────────────
 
-    /**
-     * Récupère le profil complet de l'utilisateur.
-     * Retourne les données communes + données spécifiques au rôle.
-     *
-     * @param email extrait du token JWT par JwtAuthFilter
-     */
     public Map<String, Object> getProfil(String email) {
         Utilisateur u = getByEmail(email);
 
-        // Données communes à tous les rôles
         Map<String, Object> profil = new HashMap<>();
         profil.put("id",           u.getId());
         profil.put("nom",          u.getNom());
@@ -54,7 +38,6 @@ public class UserService {
         profil.put("role",         u.getRole().name());
         profil.put("dateInscript", u.getDateInscript());
 
-        // Données spécifiques selon le rôle
         switch (u.getRole()) {
             case PRODUCTEUR -> producteurRepo.findByUtilisateur(u).ifPresent(p -> {
                 profil.put("localCult",        p.getLocalCult());
@@ -74,18 +57,10 @@ public class UserService {
 
     // ── UPDATE PROFIL ─────────────────────────────────────────
 
-    /**
-     * Met à jour les informations du profil.
-     * Seuls les champs fournis (non-null) sont modifiés.
-     *
-     * @param email extrait du token JWT
-     * @param body  map des champs à modifier
-     */
     @Transactional
     public Map<String, Object> updateProfil(String email, Map<String, Object> body) {
         Utilisateur u = getByEmail(email);
 
-        // Mettre à jour les champs communs si fournis
         if (body.get("nom")          != null) u.setNom((String) body.get("nom"));
         if (body.get("prenom")       != null) u.setPrenom((String) body.get("prenom"));
         if (body.get("numTel")       != null) u.setNumTel((String) body.get("numTel"));
@@ -93,7 +68,6 @@ public class UserService {
 
         utilisateurRepo.save(u);
 
-        // Mettre à jour les champs spécifiques au rôle
         switch (u.getRole()) {
             case PRODUCTEUR -> producteurRepo.findByUtilisateur(u).ifPresent(p -> {
                 if (body.get("localCult")        != null) p.setLocalCult((String) body.get("localCult"));
@@ -115,13 +89,6 @@ public class UserService {
 
     // ── UPDATE PHOTO ──────────────────────────────────────────
 
-    /**
-     * Sauvegarde l'URL Cloudinary de la photo de profil.
-     * L'upload est géré côté frontend — on reçoit juste l'URL.
-     *
-     * @param email    extrait du token JWT
-     * @param photoUrl URL sécurisée retournée par Cloudinary
-     */
     @Transactional
     public Map<String, Object> updatePhoto(String email, String photoUrl) {
         Utilisateur u = getByEmail(email);
@@ -132,39 +99,64 @@ public class UserService {
 
     // ── UPDATE PASSWORD ───────────────────────────────────────
 
-    /**
-     * Change le mot de passe après vérification de l'ancien.
-     *
-     * @param email      extrait du token JWT
-     * @param ancienMdp  mot de passe actuel pour confirmation
-     * @param nouveauMdp nouveau mot de passe souhaité
-     */
     @Transactional
     public void updatePassword(String email, String ancienMdp, String nouveauMdp) {
         Utilisateur u = getByEmail(email);
 
-        // Vérifier que l'ancien mot de passe est correct
-        if (!passwordEncoder.matches(ancienMdp, u.getMdp())) {
+        if (!passwordEncoder.matches(ancienMdp, u.getMdp()))
             throw new RuntimeException("Ancien mot de passe incorrect");
-        }
 
-        // Vérifier que le nouveau est différent de l'ancien
-        if (passwordEncoder.matches(nouveauMdp, u.getMdp())) {
+        if (passwordEncoder.matches(nouveauMdp, u.getMdp()))
             throw new RuntimeException("Le nouveau mot de passe doit être différent de l'ancien");
-        }
 
-        // Encoder et sauvegarder le nouveau mot de passe
         u.setMdp(passwordEncoder.encode(nouveauMdp));
         utilisateurRepo.save(u);
     }
 
-    // ── HELPER ────────────────────────────────────────────────
+    // ── ✅ NOUVEAU — LISTE POUR MESSAGERIE ────────────────────
 
     /**
-     * Récupère un utilisateur par email ou lance une exception
+     * Retourne tous les utilisateurs actifs sauf l'utilisateur connecté.
+     * Utilisé par la messagerie pour afficher la liste des contacts.
      */
+    public List<Map<String, Object>> getListe(String emailConnecte) {
+        return utilisateurRepo.findAll().stream()
+                .filter(u -> Boolean.TRUE.equals(u.getActif())
+                          && !u.getEmail().equals(emailConnecte))
+                .map(this::buildPublic)
+                .collect(Collectors.toList());
+    }
+
+    // ── ✅ NOUVEAU — INFOS PUBLIQUES PAR ID (pour Feign) ──────
+
+    /**
+     * Retourne les infos publiques d'un utilisateur par son ID.
+     * Appelé par le service-messagerie via Feign pour enrichir
+     * les conversations avec nom + photo de l'interlocuteur.
+     */
+    public Map<String, Object> getPublic(Integer id) {
+        Utilisateur u = utilisateurRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable : " + id));
+        return buildPublic(u);
+    }
+
+    // ── HELPERS ───────────────────────────────────────────────
+
     private Utilisateur getByEmail(String email) {
         return utilisateurRepo.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
+    }
+
+    /**
+     * Infos minimales exposées pour la messagerie.
+     * Pas de données sensibles (mdp, email, etc.)
+     */
+    private Map<String, Object> buildPublic(Utilisateur u) {
+        Map<String, Object> res = new HashMap<>();
+        res.put("id",    u.getId());
+        res.put("nom",   u.getNom() + " " + u.getPrenom());
+        res.put("photo", u.getPhoto());
+        res.put("role",  u.getRole().name());
+        return res;
     }
 }

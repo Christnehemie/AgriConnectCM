@@ -24,6 +24,10 @@ cd %ROOT%backend\service-abonnements
 call mvn clean package -DskipTests
 echo [OK] service-abonnements
 
+cd %ROOT%backend\service-messagerie
+call mvn clean package -DskipTests
+echo [OK] service-messagerie
+
 echo.
 echo [2/3] Docker...
 cd %ROOT%devOps
@@ -33,12 +37,13 @@ docker-compose up -d
 
 echo.
 echo ============================================
-echo   DEPLOY TERMINE
+echo   DEPLOIEMENT TERMINéE
 echo ============================================
 echo   Service Registry : http://localhost:8761
 echo   API Gateway      : http://localhost:8080
 echo   Utilisateurs     : http://localhost:8081
 echo   Abonnements      : http://localhost:8082
-echo   Frontend         : http://localhost:4200
+echo   Messagerie       : http://localhost:8083
+echo   Frontend         : http://localhost:8100
 echo ============================================
 pause

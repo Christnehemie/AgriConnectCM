@@ -53,4 +53,27 @@ public class UserController {
             return ResponseEntity.badRequest().body(Map.of("erreur", e.getMessage()));
         }
     }
+
+    // ✅ NOUVEAU — Liste de tous les utilisateurs actifs (pour la messagerie)
+    // GET /api/users/liste
+    @GetMapping("/liste")
+    public ResponseEntity<?> getListe(Authentication auth) {
+        try {
+            // Exclure l'utilisateur connecté de la liste
+            return ResponseEntity.ok(userService.getListe(auth.getName()));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("erreur", e.getMessage()));
+        }
+    }
+
+    // ✅ NOUVEAU — Infos publiques d'un utilisateur par son ID
+    // GET /api/users/{id}/public
+    @GetMapping("/{id}/public")
+    public ResponseEntity<?> getPublic(@PathVariable Integer id) {
+        try {
+            return ResponseEntity.ok(userService.getPublic(id));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("erreur", e.getMessage()));
+        }
+    }
 }

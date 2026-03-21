@@ -1,0 +1,40 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: service-messagerie
+
+  datasource:
+    url: jdbc:postgresql://database:5432/agriconnectdb
+    username: agriconnect
+    password: agriconnect237
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+  # Taille max upload — images, vidéos, fichiers
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://service-registry:8761/eureka/
+
+jwt:
+  secret: "agriconnect@2026#cameroun!XyZ789"
+  expiration: 86400000
+
+# ── Cloudinary ────────────────────────────────────────────────────────────────
+# ⚠️  api-secret : virgule de fin supprimée (était "...sFQ," → "...sFQ")
+cloudinary:
+  cloud-name: duskiojr4
+  api-key: "453652955374233"
+  api-secret: "YDvFBqxwbe9zNZYWke6DDJyXsFQ"
+  folder: agriconnect/messagerie
