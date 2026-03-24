@@ -28,6 +28,11 @@ cd %ROOT%backend\service-messagerie
 call mvn clean package -DskipTests
 echo [OK] service-messagerie
 
+cd %ROOT%backend\service-offre
+call mvn clean package -DskipTests
+echo [OK] service-offre
+
+
 echo.
 echo [2/3] Docker...
 cd %ROOT%devOps
@@ -44,6 +49,7 @@ echo   API Gateway      : http://localhost:8080
 echo   Utilisateurs     : http://localhost:8081
 echo   Abonnements      : http://localhost:8082
 echo   Messagerie       : http://localhost:8083
+echo   Publication      : http://localhost:8084
 echo   Frontend         : http://localhost:8100
 echo ============================================
 pause

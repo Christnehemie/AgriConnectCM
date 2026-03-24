@@ -1,3 +1,52 @@
+server:
+  port: 8084
+
 spring:
   application:
     name: service-offre
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://database:5432/agriconnectdb}
+    username: ${SPRING_DATASOURCE_USERNAME:agriconnect}
+    password: ${SPRING_DATASOURCE_PASSWORD:agriconnect237}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://service-registry:8761/eureka/}
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}
+
+jwt:
+  secret: ${JWT_SECRET:agriconnect@2026#cameroun!XyZ789}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.agriconnect: INFO
+    org.springframework.security: WARN

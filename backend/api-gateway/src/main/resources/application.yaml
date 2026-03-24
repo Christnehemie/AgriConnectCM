@@ -35,7 +35,7 @@ spring:
         - id: service-offre
           uri: lb://service-offre
           predicates:
-            - Path=/api/offre/**
+            - Path=/api/offres/**               # ← corrigé : offres avec s
 
         - id: service-suivi
           uri: lb://service-suivi
@@ -52,9 +52,6 @@ spring:
           predicates:
             - Path=/api/alertes/**
 
-        # ── Service Messagerie ────────────────────────────
-        # REST : /api/messagerie/**
-        # WebSocket : /ws/**
         - id: service-messagerie
           uri: lb://service-messagerie
           predicates:

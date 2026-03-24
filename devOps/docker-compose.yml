@@ -88,6 +88,26 @@ services:
     networks:
       - agriconnect-net
 
+
+  # ── Service offre ────────────────────────────────
+  service-offre:
+    build: ../backend/service-offre
+    container_name: service-offre
+    restart: always
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://database:5432/agriconnectdb
+      SPRING_DATASOURCE_USERNAME: agriconnect
+      SPRING_DATASOURCE_PASSWORD: agriconnect237
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka/
+    depends_on:
+      - service-registry
+      - database
+    networks:
+      - agriconnect-net
+
+
   frontend:
     build: ../frontend
     container_name: agriconnect-frontend
