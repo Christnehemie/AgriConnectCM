@@ -37,22 +37,41 @@ public class UserService {
         profil.put("photo",        u.getPhoto());
         profil.put("role",         u.getRole().name());
         profil.put("dateInscript", u.getDateInscript());
+        // ✅ AJOUT des coordonnées GPS
+        profil.put("latitude",     u.getLatitude());
+        profil.put("longitude",    u.getLongitude());
 
         switch (u.getRole()) {
             case PRODUCTEUR -> producteurRepo.findByUtilisateur(u).ifPresent(p -> {
                 profil.put("localCult",        p.getLocalCult());
                 profil.put("certificationBio", p.getCertificationBio());
+                profil.put("photoExploitation", p.getPhotoExploitation());
+                profil.put("logoEntreprise", p.getLogoEntreprise());
+                profil.put("siteWeb", p.getSiteWeb());
+                profil.put("descriptionActivite", p.getDescriptionActivite());
             });
             case TRANSPORTEUR -> transporteurRepo.findByUtilisateur(u).ifPresent(t -> {
                 profil.put("numCni",         t.getNumCni());
                 profil.put("dispoImmediate", t.getDispoImmediate());
+                profil.put("permis", t.getPermis());
+                profil.put("zoneIntervention", t.getZoneIntervention());
+                profil.put("noteMoyenne", t.getNoteMoyenne());
+                profil.put("nbEvaluations", t.getNbEvaluations());
+                profil.put("experienceAnnees", t.getExperienceAnnees());
             });
             case ACHETEUR -> acheteurRepo.findByUtilisateur(u).ifPresent(a -> {
                 profil.put("localLivraison", a.getLocalLivraison());
+                profil.put("modePaiementPrefere", a.getModePaiementPrefere());
             });
         }
 
         return profil;
+    }
+
+    // ✅ NOUVEAU - Récupérer l'ID par email
+    public Integer getUserIdByEmail(String email) {
+        Utilisateur u = getByEmail(email);
+        return u.getId();
     }
 
     // ── UPDATE PROFIL ─────────────────────────────────────────
@@ -72,14 +91,20 @@ public class UserService {
             case PRODUCTEUR -> producteurRepo.findByUtilisateur(u).ifPresent(p -> {
                 if (body.get("localCult")        != null) p.setLocalCult((String) body.get("localCult"));
                 if (body.get("certificationBio") != null) p.setCertificationBio((Boolean) body.get("certificationBio"));
+                if (body.get("photoExploitation") != null) p.setPhotoExploitation((String) body.get("photoExploitation"));
+                if (body.get("logoEntreprise")   != null) p.setLogoEntreprise((String) body.get("logoEntreprise"));
+                if (body.get("siteWeb")          != null) p.setSiteWeb((String) body.get("siteWeb"));
+                if (body.get("descriptionActivite") != null) p.setDescriptionActivite((String) body.get("descriptionActivite"));
                 producteurRepo.save(p);
             });
             case TRANSPORTEUR -> transporteurRepo.findByUtilisateur(u).ifPresent(t -> {
                 if (body.get("dispoImmediate") != null) t.setDispoImmediate((Boolean) body.get("dispoImmediate"));
+                if (body.get("zoneIntervention") != null) t.setZoneIntervention((String) body.get("zoneIntervention"));
                 transporteurRepo.save(t);
             });
             case ACHETEUR -> acheteurRepo.findByUtilisateur(u).ifPresent(a -> {
                 if (body.get("localLivraison") != null) a.setLocalLivraison((String) body.get("localLivraison"));
+                if (body.get("modePaiementPrefere") != null) a.setModePaiementPrefere((String) body.get("modePaiementPrefere"));
                 acheteurRepo.save(a);
             });
         }
@@ -113,12 +138,8 @@ public class UserService {
         utilisateurRepo.save(u);
     }
 
-    // ── ✅ NOUVEAU — LISTE POUR MESSAGERIE ────────────────────
+    // ── LISTE POUR MESSAGERIE ─────────────────────────────────
 
-    /**
-     * Retourne tous les utilisateurs actifs sauf l'utilisateur connecté.
-     * Utilisé par la messagerie pour afficher la liste des contacts.
-     */
     public List<Map<String, Object>> getListe(String emailConnecte) {
         return utilisateurRepo.findAll().stream()
                 .filter(u -> Boolean.TRUE.equals(u.getActif())
@@ -127,13 +148,8 @@ public class UserService {
                 .collect(Collectors.toList());
     }
 
-    // ── ✅ NOUVEAU — INFOS PUBLIQUES PAR ID (pour Feign) ──────
+    // ── INFOS PUBLIQUES PAR ID ────────────────────────────────
 
-    /**
-     * Retourne les infos publiques d'un utilisateur par son ID.
-     * Appelé par le service-messagerie via Feign pour enrichir
-     * les conversations avec nom + photo de l'interlocuteur.
-     */
     public Map<String, Object> getPublic(Integer id) {
         Utilisateur u = utilisateurRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Utilisateur introuvable : " + id));
@@ -147,16 +163,16 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
     }
 
-    /**
-     * Infos minimales exposées pour la messagerie.
-     * Pas de données sensibles (mdp, email, etc.)
-     */
     private Map<String, Object> buildPublic(Utilisateur u) {
         Map<String, Object> res = new HashMap<>();
         res.put("id",    u.getId());
-        res.put("nom",   u.getNom() + " " + u.getPrenom());
+        res.put("nom",   u.getPrenom() + " " + u.getNom());
         res.put("photo", u.getPhoto());
         res.put("role",  u.getRole().name());
+        // ✅ AJOUT des coordonnées GPS dans les infos publiques
+        res.put("latitude", u.getLatitude());
+        res.put("longitude", u.getLongitude());
+        res.put("localHabitat", u.getLocalHabitat());
         return res;
     }
 }

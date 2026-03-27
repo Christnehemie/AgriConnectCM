@@ -1,5 +1,6 @@
 package com.agriconnect.service_utilisateurs.controller;
 
+import com.agriconnect.service_utilisateurs.service.AuthService;
 import com.agriconnect.service_utilisateurs.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +14,7 @@ import java.util.Map;
 public class UserController {
 
     private final UserService userService;
+    private final AuthService authService;  // ✅ AJOUTÉ
 
     @GetMapping("/profil")
     public ResponseEntity<?> getProfil(Authentication auth) {
@@ -54,20 +56,34 @@ public class UserController {
         }
     }
 
-    // ✅ NOUVEAU — Liste de tous les utilisateurs actifs (pour la messagerie)
-    // GET /api/users/liste
+    // ✅ NOUVEAU - Mettre à jour la localisation
+    @PutMapping("/profil/localisation")
+    public ResponseEntity<?> updateLocalisation(
+            Authentication auth, 
+            @RequestBody Map<String, String> body) {
+        try {
+            Integer userId = userService.getUserIdByEmail(auth.getName());
+            String address = body.get("address");
+            if (address == null || address.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("erreur", "Adresse obligatoire"));
+            }
+            return ResponseEntity.ok(authService.updateLocalisation(userId, address));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("erreur", e.getMessage()));
+        }
+    }
+
+    // Liste de tous les utilisateurs actifs
     @GetMapping("/liste")
     public ResponseEntity<?> getListe(Authentication auth) {
         try {
-            // Exclure l'utilisateur connecté de la liste
             return ResponseEntity.ok(userService.getListe(auth.getName()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("erreur", e.getMessage()));
         }
     }
 
-    // ✅ NOUVEAU — Infos publiques d'un utilisateur par son ID
-    // GET /api/users/{id}/public
+    // Infos publiques d'un utilisateur par son ID
     @GetMapping("/{id}/public")
     public ResponseEntity<?> getPublic(@PathVariable Integer id) {
         try {

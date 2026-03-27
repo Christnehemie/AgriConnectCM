@@ -2,17 +2,10 @@ package com.agriconnect.service_utilisateurs.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.math.BigDecimal;  // ← IMPORTANT
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-/**
- * ============================================================
- * Utilisateur — Entité principale AgriConnect
- * ============================================================
- * L'abonnement est géré via la table abonnements (relation)
- * et non via un champ direct dans cette entité.
- * ============================================================
- */
 @Entity
 @Table(name = "utilisateur")
 @Data
@@ -64,7 +57,13 @@ public class Utilisateur {
     @Column(name = "derniere_connexion")
     private LocalDateTime derniereConnexion;
 
-    /** Rôles possibles dans AgriConnect */
+    // ✅ AJOUTER CES CHAMPS
+    @Column(precision = 10, scale = 8)
+    private BigDecimal latitude;
+
+    @Column(precision = 11, scale = 8)
+    private BigDecimal longitude;
+
     public enum Role {
         PRODUCTEUR, TRANSPORTEUR, ACHETEUR
     }

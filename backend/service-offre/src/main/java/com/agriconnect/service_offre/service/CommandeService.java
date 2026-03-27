@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -16,23 +17,25 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CommandeService {
 
-    private final CommandeOffreRepository  commandeRepo;
-    private final PublicationRepository    pubRepo;
-    private final ProduitRepository        produitRepo;
-    private final AcheteurRepository       acheteurRepo;
-    private final ProducteurRepository     producteurRepo;
-    private final TransporteurRepository   transporteurRepo;
-    private final UtilisateurRepository    userRepo;
-    private final AlgoTransporteurService  algo;
+    private final CommandeOffreRepository commandeRepo;
+    private final PublicationRepository pubRepo;
+    private final ProduitRepository produitRepo;
+    private final AcheteurRepository acheteurRepo;
+    private final ProducteurRepository producteurRepo;
+    private final TransporteurRepository transporteurRepo;
+    private final UtilisateurRepository userRepo;
+    private final AlgoTransporteurService algoTransporteur;
 
-    // ── Commander une offre ──────────────────────────────────────
     @Transactional
     public CommandeDTO commander(Integer idPublication, Integer idUserAcheteur,
                                   Integer quantite, String methodePaiement) {
 
-        // Vérifications
+        log.info("📝 Création commande - Publication: {}, Acheteur: {}, Quantité: {}", 
+            idPublication, idUserAcheteur, quantite);
+
         Publication pub = pubRepo.findById(idPublication)
             .orElseThrow(() -> new RuntimeException("Publication introuvable"));
+        
         if (!"OFFRE".equals(pub.getTypePub()))
             throw new RuntimeException("Cette publication n'est pas une offre");
         if (!Boolean.TRUE.equals(pub.getDisponible()))
@@ -40,60 +43,86 @@ public class CommandeService {
 
         Produit produit = produitRepo.findById(pub.getIdProduit())
             .orElseThrow(() -> new RuntimeException("Produit introuvable"));
-
-        // Vérification stock
+        
         if (produit.getStockDisponible() != null && quantite > produit.getStockDisponible())
-            throw new RuntimeException("Stock insuffisant : " +
-                produit.getStockDisponible() + " " + pub.getUniteMesure() + " disponibles");
+            throw new RuntimeException("Stock insuffisant");
 
         Acheteur acheteur = acheteurRepo.findByIdUtilisateur(idUserAcheteur)
             .orElseThrow(() -> new RuntimeException("Profil acheteur introuvable"));
+        
         Producteur producteur = producteurRepo.findByIdUtilisateur(pub.getIdPosteur())
             .orElseThrow(() -> new RuntimeException("Profil producteur introuvable"));
 
-        // Calculs automatiques
         BigDecimal poidsTotal = produit.getPoidsUnitaire() != null
             ? produit.getPoidsUnitaire().multiply(BigDecimal.valueOf(quantite))
             : BigDecimal.ONE;
+        
         BigDecimal prixEstime = pub.getPrixOffre() != null
             ? pub.getPrixOffre().multiply(BigDecimal.valueOf(quantite))
             : BigDecimal.ZERO;
 
-        // Sélection transporteur par algo GPS
         Utilisateur userProd = userRepo.findById(pub.getIdPosteur()).orElse(null);
-        Integer idTransporteurSelectionne = algo.trouverTransporteur(
-            poidsTotal,
-            userProd != null ? userProd.getLatitude() : null,
-            userProd != null ? userProd.getLongitude() : null);
-        Transporteur transporteur = idTransporteurSelectionne != null
-            ? transporteurRepo.findById(idTransporteurSelectionne).orElse(null)
-            : null;
-
-        String statut = transporteur != null ? "TRANSPORTEUR_ASSIGNE" : "EN_ATTENTE";
-
+        
+        BigDecimal latProducteur = userProd != null ? userProd.getLatitude() : null;
+        BigDecimal lonProducteur = userProd != null ? userProd.getLongitude() : null;
+        
+        if (latProducteur == null || lonProducteur == null) {
+            log.warn("⚠️ Producteur #{} sans coordonnées GPS", pub.getIdPosteur());
+        }
+        
+        Integer idTransporteur = null;
+        
+        if (latProducteur != null && lonProducteur != null) {
+            idTransporteur = algoTransporteur.trouverEtNotifierTransporteur(
+                latProducteur,
+                lonProducteur,
+                poidsTotal,
+                null,
+                produit.getNom(),
+                quantite,
+                pub.getUniteMesure(),
+                prixEstime
+            );
+        }
+        
+        String statut = idTransporteur != null ? "TRANSPORTEUR_ASSIGNE" : "EN_ATTENTE";
+        
         CommandeOffre commande = CommandeOffre.builder()
             .idPublication(idPublication)
             .idAcheteur(acheteur.getId())
             .idProducteur(producteur.getId())
             .quantite(quantite)
             .poidsTotal(poidsTotal)
-            .volumeTotal(BigDecimal.ZERO)
             .prixEstime(prixEstime)
-            .idTransporteur(transporteur != null ? transporteur.getId() : null)
+            .idTransporteur(idTransporteur)
             .statut(statut)
             .notes(methodePaiement)
             .build();
 
         CommandeOffre saved = commandeRepo.save(commande);
-        log.info("✅ Commande #{} créée statut={}", saved.getId(), saved.getStatut());
+        
+        if (idTransporteur != null && latProducteur != null && lonProducteur != null) {
+            algoTransporteur.trouverEtNotifierTransporteur(
+                latProducteur,
+                lonProducteur,
+                poidsTotal,
+                saved.getId(),
+                produit.getNom(),
+                quantite,
+                pub.getUniteMesure(),
+                prixEstime
+            );
+        }
+        
+        log.info("✅ Commande #{} créée - statut: {}", saved.getId(), saved.getStatut());
         return toDTO(saved);
     }
 
-    // ── Transporteur accepte ─────────────────────────────────────
     @Transactional
     public CommandeDTO accepterCommande(Integer idCommande, Integer idUserTransporteur) {
         CommandeOffre cmd = commandeRepo.findById(idCommande)
             .orElseThrow(() -> new RuntimeException("Commande introuvable"));
+        
         Transporteur trans = transporteurRepo.findByIdUtilisateur(idUserTransporteur)
             .orElseThrow(() -> new RuntimeException("Profil transporteur introuvable"));
 
@@ -101,47 +130,71 @@ public class CommandeService {
             throw new RuntimeException("Cette commande ne vous est pas assignée");
 
         cmd.setStatut("EN_COURS");
-        return toDTO(commandeRepo.save(cmd));
+        CommandeOffre saved = commandeRepo.save(cmd);
+        
+        log.info("✅ Transporteur #{} a accepté la commande #{}", trans.getId(), idCommande);
+        return toDTO(saved);
     }
 
-    // ── Transporteur refuse → réassignation auto ─────────────────
     @Transactional
     public CommandeDTO refuserCommande(Integer idCommande, Integer idUserTransporteur) {
         CommandeOffre cmd = commandeRepo.findById(idCommande)
             .orElseThrow(() -> new RuntimeException("Commande introuvable"));
 
         Publication pub = pubRepo.findById(cmd.getIdPublication()).orElse(null);
+        Produit produit = pub != null && pub.getIdProduit() != null
+            ? produitRepo.findById(pub.getIdProduit()).orElse(null) : null;
         Utilisateur userProd = pub != null
             ? userRepo.findById(pub.getIdPosteur()).orElse(null) : null;
 
-        Integer idNouveauTrans = algo.trouverTransporteur(
-            cmd.getPoidsTotal(),
-            userProd != null ? userProd.getLatitude() : null,
-            userProd != null ? userProd.getLongitude() : null);
-        Transporteur nouveauTrans = idNouveauTrans != null
-            ? transporteurRepo.findById(idNouveauTrans).orElse(null)
-            : null;
+        BigDecimal poidsTotal = cmd.getPoidsTotal();
+        if (poidsTotal == null && produit != null && cmd.getQuantite() != null) {
+            poidsTotal = produit.getPoidsUnitaire() != null
+                ? produit.getPoidsUnitaire().multiply(BigDecimal.valueOf(cmd.getQuantite()))
+                : BigDecimal.ONE;
+        }
+        
+        BigDecimal prixEstime = cmd.getPrixEstime();
+        if (prixEstime == null && pub != null && pub.getPrixOffre() != null && cmd.getQuantite() != null) {
+            prixEstime = pub.getPrixOffre().multiply(BigDecimal.valueOf(cmd.getQuantite()));
+        }
+        
+        BigDecimal latProd = userProd != null ? userProd.getLatitude() : null;
+        BigDecimal lonProd = userProd != null ? userProd.getLongitude() : null;
+        
+        Integer idNouveauTrans = null;
+        if (latProd != null && lonProd != null) {
+            idNouveauTrans = algoTransporteur.trouverEtNotifierTransporteur(
+                latProd,
+                lonProd,
+                poidsTotal,
+                cmd.getId(),
+                produit != null ? produit.getNom() : "produit",
+                cmd.getQuantite(),
+                pub != null ? pub.getUniteMesure() : "kg",
+                prixEstime
+            );
+        }
 
-        if (nouveauTrans != null && !nouveauTrans.getId().equals(cmd.getIdTransporteur())) {
-            cmd.setIdTransporteur(nouveauTrans.getId());
+        if (idNouveauTrans != null && !idNouveauTrans.equals(cmd.getIdTransporteur())) {
+            cmd.setIdTransporteur(idNouveauTrans);
             cmd.setStatut("TRANSPORTEUR_ASSIGNE");
         } else {
             cmd.setIdTransporteur(null);
             cmd.setStatut("EN_ATTENTE");
         }
 
-        log.info("Commande #{} refusée — nouveau transporteur: {}", idCommande, cmd.getIdTransporteur());
+        log.info("Commande #{} refusée - nouveau transporteur: {}", idCommande, cmd.getIdTransporteur());
         return toDTO(commandeRepo.save(cmd));
     }
 
-    // ── Marquer livré ────────────────────────────────────────────
     @Transactional
     public CommandeDTO marquerLivre(Integer idCommande, Integer idUserTransporteur) {
         CommandeOffre cmd = commandeRepo.findById(idCommande)
             .orElseThrow(() -> new RuntimeException("Commande introuvable"));
+        
         cmd.setStatut("LIVRE");
-
-        // Décrémenter stock + désactiver offre si épuisé
+        
         Publication pub = pubRepo.findById(cmd.getIdPublication()).orElse(null);
         if (pub != null && pub.getIdProduit() != null) {
             produitRepo.findById(pub.getIdProduit()).ifPresent(produit -> {
@@ -156,21 +209,21 @@ public class CommandeService {
                 }
             });
         }
-
+        
         log.info("✅ Commande #{} livrée", idCommande);
         return toDTO(commandeRepo.save(cmd));
     }
 
-    // ── Annuler ──────────────────────────────────────────────────
     @Transactional
     public CommandeDTO annuler(Integer idCommande, Integer idUser) {
         CommandeOffre cmd = commandeRepo.findById(idCommande)
             .orElseThrow(() -> new RuntimeException("Commande introuvable"));
+        
         cmd.setStatut("ANNULE");
+        log.info("⚠️ Commande #{} annulée", idCommande);
         return toDTO(commandeRepo.save(cmd));
     }
 
-    // ── Listes ───────────────────────────────────────────────────
     public List<CommandeDTO> getMesCommandes(Integer idUserAcheteur) {
         Acheteur a = acheteurRepo.findByIdUtilisateur(idUserAcheteur).orElse(null);
         if (a == null) return List.of();
@@ -192,42 +245,50 @@ public class CommandeService {
             .stream().map(this::toDTO).collect(Collectors.toList());
     }
 
-    // ── Mapper ───────────────────────────────────────────────────
     private CommandeDTO toDTO(CommandeOffre c) {
         CommandeDTO dto = CommandeDTO.builder()
-            .id(c.getId()).idPublication(c.getIdPublication())
-            .idAcheteur(c.getIdAcheteur()).idProducteur(c.getIdProducteur())
-            .idTransporteur(c.getIdTransporteur()).quantite(c.getQuantite())
-            .poidsTotal(c.getPoidsTotal()).prixEstime(c.getPrixEstime())
-            .statut(c.getStatut()).dateCommande(c.getDateCommande())
-            .methodePaiement(c.getNotes()).build();
+            .id(c.getId())
+            .idPublication(c.getIdPublication())
+            .idAcheteur(c.getIdAcheteur())
+            .idProducteur(c.getIdProducteur())
+            .idTransporteur(c.getIdTransporteur())
+            .quantite(c.getQuantite())
+            .poidsTotal(c.getPoidsTotal())
+            .prixEstime(c.getPrixEstime())
+            .statut(c.getStatut())
+            .dateCommande(c.getDateCommande())
+            .methodePaiement(c.getNotes())
+            .build();
 
         pubRepo.findById(c.getIdPublication()).ifPresent(p -> {
             dto.setTitreOffre(p.getContenu());
             dto.setImageOffre(p.getImage());
         });
 
-        if (c.getIdAcheteur() != null)
+        if (c.getIdAcheteur() != null) {
             acheteurRepo.findById(c.getIdAcheteur()).ifPresent(a ->
                 userRepo.findById(a.getIdUtilisateur()).ifPresent(u -> {
                     dto.setNomAcheteur(u.getPrenom() + " " + u.getNom());
                     dto.setPhotoAcheteur(u.getPhoto());
                     dto.setAdresseLivraison(a.getLocalLivraison());
                 }));
+        }
 
-        if (c.getIdProducteur() != null)
+        if (c.getIdProducteur() != null) {
             producteurRepo.findById(c.getIdProducteur()).ifPresent(p ->
                 userRepo.findById(p.getIdUtilisateur()).ifPresent(u -> {
                     dto.setNomProducteur(u.getPrenom() + " " + u.getNom());
                     dto.setPhotoProducteur(u.getPhoto());
                 }));
+        }
 
-        if (c.getIdTransporteur() != null)
+        if (c.getIdTransporteur() != null) {
             transporteurRepo.findById(c.getIdTransporteur()).ifPresent(t ->
                 userRepo.findById(t.getIdUtilisateur()).ifPresent(u -> {
                     dto.setNomTransporteur(u.getPrenom() + " " + u.getNom());
                     dto.setPhotoTransporteur(u.getPhoto());
                 }));
+        }
 
         return dto;
     }
