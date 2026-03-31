@@ -23,6 +23,7 @@ public class PublicationService {
     private final LikeRepository          likeRepo;
     private final UtilisateurRepository   userRepo;
     private final CommandeOffreRepository commandeRepo;
+    private final SavedPublicationRepository savedRepo;
 
     // ── Feed tous types ──────────────────────────────────────────
     public Page<PublicationDTO> getFeed(Integer idUser, int page, int size) {
@@ -123,6 +124,18 @@ public class PublicationService {
             .stream().map(p -> toDTO(p, idUser)).collect(Collectors.toList());
     }
 
+    public PublicationDTO getById(Integer idPub, Integer idUser) {
+        return pubRepo.findById(idPub)
+            .map(p -> toDTO(p, idUser))
+            .orElseThrow(() -> new RuntimeException("Publication non trouvée"));
+    }
+
+    public List<PublicationDTO> getPublicationsByIds(List<Integer> ids, Integer idUser) {
+        return pubRepo.findAllById(ids).stream()
+                .map(p -> toDTO(p, idUser))
+                .collect(Collectors.toList());
+    }
+
     // ── Mapper ───────────────────────────────────────────────────
     public PublicationDTO toDTO(Publication p, Integer idUser) {
         Utilisateur u = p.getPosteur() != null ? p.getPosteur()
@@ -130,6 +143,8 @@ public class PublicationService {
 
         boolean liked = idUser != null &&
             likeRepo.existsByIdPublicationAndIdUtilisateur(p.getId(), idUser);
+        boolean saved = idUser != null &&
+            savedRepo.existsByIdPublicationAndIdUtilisateur(p.getId(), idUser);
         long nbComm = commRepo.countByIdPublication(p.getId());
         long nbCmd  = commandeRepo
             .findByIdProducteurOrderByDateCommandeDesc(p.getIdPosteur())
@@ -150,7 +165,7 @@ public class PublicationService {
         return PublicationDTO.builder()
             .id(p.getId()).contenu(p.getContenu()).image(p.getImage())
             .datePublication(p.getDatePublication()).nbLikes(p.getNbLikes())
-            .nbCommentaires(nbComm).likeParMoi(liked).nbCommandes(nbCmd)
+            .nbCommentaires(nbComm).likeParMoi(liked).savedParMoi(saved).nbCommandes(nbCmd)
             .idPosteur(p.getIdPosteur())
             .nomPosteur(u != null ? u.getPrenom() + " " + u.getNom() : "Utilisateur")
             .photoPosteur(u != null ? u.getPhoto() : null)

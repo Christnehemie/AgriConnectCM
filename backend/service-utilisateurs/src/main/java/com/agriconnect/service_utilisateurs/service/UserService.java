@@ -148,6 +148,14 @@ public class UserService {
                 .collect(Collectors.toList());
     }
 
+    // ── NOUVEAU - TOUS LES TRANSPORTEURS AVEC LOCATION ─────
+    public List<Map<String, Object>> getTransportersWithLocation() {
+        return utilisateurRepo.findByRoleAndActifTrueAndLatitudeIsNotNullAndLongitudeIsNotNull(Utilisateur.Role.TRANSPORTEUR)
+                .stream()
+                .map(this::buildPublic)
+                .collect(Collectors.toList());
+    }
+
     // ── INFOS PUBLIQUES PAR ID ────────────────────────────────
 
     public Map<String, Object> getPublic(Integer id) {

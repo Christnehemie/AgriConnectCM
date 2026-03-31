@@ -13,6 +13,7 @@ public class PublicationDTO {
     private Integer nbLikes;
     private long nbCommentaires;
     private boolean likeParMoi;
+    private boolean savedParMoi;
     private long nbCommandes;
     // Posteur
     private Integer idPosteur;

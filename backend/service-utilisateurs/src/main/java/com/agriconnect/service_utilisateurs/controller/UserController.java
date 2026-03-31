@@ -73,6 +73,16 @@ public class UserController {
         }
     }
 
+    // ✅ NOUVEAU - Liste des transporteurs avec leurs coordonnées pour la Map
+    @GetMapping("/transporters")
+    public ResponseEntity<?> getTransportersForMap() {
+        try {
+            return ResponseEntity.ok(userService.getTransportersWithLocation());
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("erreur", e.getMessage()));
+        }
+    }
+
     // Liste de tous les utilisateurs actifs
     @GetMapping("/liste")
     public ResponseEntity<?> getListe(Authentication auth) {

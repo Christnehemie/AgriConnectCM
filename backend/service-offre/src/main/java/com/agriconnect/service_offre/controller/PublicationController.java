@@ -23,6 +23,7 @@ public class PublicationController {
     private final PublicationService pubService;
     private final CommandeService cmdService;
     private final ProduitService produitService;
+    private final SavedPublicationService savedService;
 
     private Integer id(Authentication a) {
         return (Integer) a.getDetails();
@@ -155,6 +156,17 @@ public class PublicationController {
             @RequestParam String q,
             @RequestParam(required = false) String type) {
         return ResponseEntity.ok(pubService.rechercher(q, type, id(auth)));
+    }
+
+    @PostMapping("/{id}/save")
+    public ResponseEntity<?> toggleSave(Authentication auth, @PathVariable Integer id) {
+        savedService.toggleSave(id, id(auth));
+        return ResponseEntity.ok(Map.of("message", "Opération réussie"));
+    }
+
+    @GetMapping("/saved")
+    public ResponseEntity<List<PublicationDTO>> getSaved(Authentication auth) {
+        return ResponseEntity.ok(savedService.getSavedPublications(id(auth)));
     }
 
     // ═══════════════════════════════════════════════════════════════
